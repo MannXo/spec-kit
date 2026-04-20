@@ -2606,7 +2606,7 @@ def preset_resolve(
         console.print(f"  [bold]{template_name}[/bold]: {display_layer['path']}")
         console.print(f"    [dim](top layer from: {display_layer['source']})[/dim]")
 
-        has_composition = len(layers) > 1 or any(layer["strategy"] != "replace" for layer in layers)
+        has_composition = any(layer["strategy"] != "replace" for layer in layers)
         if has_composition:
             console.print("    [dim]Final output is composed from multiple preset layers; the path above is the highest-priority contributing layer.[/dim]")
             console.print("\n  [bold]Composition chain:[/bold]")

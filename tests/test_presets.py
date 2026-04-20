@@ -3564,6 +3564,75 @@ class TestCollectAllLayers:
         assert layers[1]["strategy"] == "replace"
 
 
+class TestRemoveReconciliation:
+    """Test that removing a preset re-registers the next layer's command."""
+
+    def test_remove_restores_lower_priority_command(
+        self, project_dir, temp_dir, valid_pack_data
+    ):
+        """After removing the top-priority preset, the next preset's command
+        should be re-registered in agent directories."""
+        manager = PresetManager(project_dir)
+
+        # Install a low-priority preset with a command
+        lo_data = {**valid_pack_data}
+        lo_data["preset"] = {
+            **valid_pack_data["preset"],
+            "id": "lo-preset",
+            "name": "Lo",
+        }
+        lo_data["provides"] = {
+            "templates": [{
+                "type": "command",
+                "name": "speckit.specify",
+                "file": "commands/speckit.specify.md",
+            }]
+        }
+        lo_dir = temp_dir / "lo-preset"
+        lo_dir.mkdir()
+        with open(lo_dir / "preset.yml", "w") as f:
+            yaml.dump(lo_data, f)
+        (lo_dir / "commands").mkdir()
+        (lo_dir / "commands" / "speckit.specify.md").write_text(
+            "---\ndescription: lo\n---\nLo content\n"
+        )
+        manager.install_from_directory(lo_dir, "0.1.5", priority=10)
+
+        # Install a high-priority preset overriding the same command
+        hi_data = {**valid_pack_data}
+        hi_data["preset"] = {
+            **valid_pack_data["preset"],
+            "id": "hi-preset",
+            "name": "Hi",
+        }
+        hi_data["provides"] = {
+            "templates": [{
+                "type": "command",
+                "name": "speckit.specify",
+                "file": "commands/speckit.specify.md",
+            }]
+        }
+        hi_dir = temp_dir / "hi-preset"
+        hi_dir.mkdir()
+        with open(hi_dir / "preset.yml", "w") as f:
+            yaml.dump(hi_data, f)
+        (hi_dir / "commands").mkdir()
+        (hi_dir / "commands" / "speckit.specify.md").write_text(
+            "---\ndescription: hi\n---\nHi content\n"
+        )
+        manager.install_from_directory(hi_dir, "0.1.5", priority=1)
+
+        # Remove the high-priority preset
+        manager.remove("hi-preset")
+
+        # The low-priority preset's command should still be present
+        # in the resolution stack
+        resolver = PresetResolver(project_dir)
+        layers = resolver._collect_all_layers("speckit.specify", "command")
+        assert len(layers) >= 1
+        assert "lo-preset" in layers[0]["source"]
+
+
 def _create_pack(temp_dir, valid_pack_data, pack_id, content,
                  strategy="replace", template_type="template",
                  template_name="spec-template"):

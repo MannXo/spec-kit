@@ -395,15 +395,16 @@ function Resolve-TemplateContent {
             }
         }
 
-        foreach ($presetId in $sortedPresets) {
-            # Read strategy and file path from preset manifest
-            $strategy = 'replace'
-            $manifestFilePath = ''
-            $manifest = Join-Path $presetsDir "$presetId/preset.yml"
-            if (Test-Path $manifest) {
-                try {
-                    # Use python3 to parse YAML manifest for strategy and file path
-                    $stratResult = & python3 -c @"
+        if ($sortedPresets.Count -gt 0) {
+            foreach ($presetId in $sortedPresets) {
+                # Read strategy and file path from preset manifest
+                $strategy = 'replace'
+                $manifestFilePath = ''
+                $manifest = Join-Path $presetsDir "$presetId/preset.yml"
+                if (Test-Path $manifest) {
+                    try {
+                        # Use python3 to parse YAML manifest for strategy and file path
+                        $stratResult = & python3 -c @"
 import yaml, sys
 try:
     with open(sys.argv[1]) as f:
@@ -416,32 +417,32 @@ try:
 except Exception:
     print('replace\t')
 "@ $manifest $TemplateName 2>$null
-                    if ($stratResult) {
-                        $parts = $stratResult.Trim() -split "`t", 2
-                        $strategy = $parts[0]
-                        if ($parts.Count -gt 1 -and $parts[1]) { $manifestFilePath = $parts[1] }
+                        if ($stratResult) {
+                            $parts = $stratResult.Trim() -split "`t", 2
+                            $strategy = $parts[0]
+                            if ($parts.Count -gt 1 -and $parts[1]) { $manifestFilePath = $parts[1] }
+                        }
+                    } catch {
+                        $strategy = 'replace'
                     }
-                } catch {
-                    $strategy = 'replace'
+                }
+                # Try manifest file path first, then convention path
+                $candidate = $null
+                if ($manifestFilePath) {
+                    $mf = Join-Path $presetsDir "$presetId/$manifestFilePath"
+                    if (Test-Path $mf) { $candidate = $mf }
+                }
+                if (-not $candidate) {
+                    $cf = Join-Path $presetsDir "$presetId/templates/$TemplateName.md"
+                    if (Test-Path $cf) { $candidate = $cf }
+                }
+                if ($candidate) {
+                    $layerPaths += $candidate
+                    $layerStrategies += $strategy
                 }
             }
-            # Try manifest file path first, then convention path
-            $candidate = $null
-            if ($manifestFilePath) {
-                $mf = Join-Path $presetsDir "$presetId/$manifestFilePath"
-                if (Test-Path $mf) { $candidate = $mf }
-            }
-            if (-not $candidate) {
-                $cf = Join-Path $presetsDir "$presetId/templates/$TemplateName.md"
-                if (Test-Path $cf) { $candidate = $cf }
-            }
-            if ($candidate) {
-                $layerPaths += $candidate
-                $layerStrategies += $strategy
-            }
-        }
-
-        if ($sortedPresets.Count -eq 0) {
+        } else {
+            # Fallback: alphabetical directory order (no registry or parse failure)
             foreach ($preset in Get-ChildItem -Path $presetsDir -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike '.*' }) {
                 $candidate = Join-Path $preset.FullName "templates/$TemplateName.md"
                 if (Test-Path $candidate) {

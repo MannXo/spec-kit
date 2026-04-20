@@ -560,7 +560,7 @@ class PresetManager:
             if strategy != "replace":
                 # Resolve composed content using the full priority stack
                 composed = resolver.resolve_content(cmd["name"], "command")
-                if composed:
+                if composed is not None:
                     # Write composed content to a temporary subdirectory
                     if composed_dir is None:
                         composed_dir = preset_dir / ".composed"
@@ -630,11 +630,11 @@ class PresetManager:
 
             has_composition = any(l["strategy"] != "replace" for l in layers)
             if not has_composition:
-                # Pure replace — the top layer wins. Find which preset owns it
-                # and re-register from that preset's file.
+                # Pure replace — the top layer wins.
                 top_layer = layers[0]
                 top_path = top_layer["path"]
-                # Find the preset that owns this layer
+                # Try to find which preset owns this layer
+                registered = False
                 for pack_id, _meta in PresetRegistry(self.presets_dir).list_by_priority():
                     pack_dir = self.presets_dir / pack_id
                     if str(top_path).startswith(str(pack_dir)):
@@ -649,15 +649,23 @@ class PresetManager:
                                     registrar.register_commands_for_all_agents(
                                         [tmpl], manifest.id, pack_dir, self.project_root
                                     )
+                                    registered = True
                                     break
                         break
+                if not registered:
+                    # Top layer is a non-preset source (extension, core, or
+                    # project override). Register directly from the layer path.
+                    self._register_command_from_path(
+                        registrar, cmd_name, top_path
+                    )
             else:
                 # Composed command — resolve from full stack
                 composed = resolver.resolve_content(cmd_name, "command")
-                if not composed:
+                if composed is None:
                     continue
 
                 # Write to the highest-priority preset's .composed dir
+                registered = False
                 for pack_id, _meta in PresetRegistry(self.presets_dir).list_by_priority():
                     pack_dir = self.presets_dir / pack_id
                     manifest_path = pack_dir / "preset.yml"
@@ -677,10 +685,43 @@ class PresetManager:
                                 [{**tmpl, "file": f".composed/{cmd_name}.md"}],
                                 manifest.id, pack_dir, self.project_root,
                             )
+                            registered = True
                             break
                     else:
                         continue
                     break
+                if not registered:
+                    # No preset owns this composed command — write to a
+                    # shared .composed dir and register from the top layer.
+                    shared_composed = self.presets_dir / ".composed"
+                    shared_composed.mkdir(parents=True, exist_ok=True)
+                    composed_file = shared_composed / f"{cmd_name}.md"
+                    composed_file.write_text(composed, encoding="utf-8")
+                    self._register_command_from_path(
+                        registrar, cmd_name, composed_file
+                    )
+
+    def _register_command_from_path(
+        self,
+        registrar: Any,
+        cmd_name: str,
+        cmd_path: Path,
+    ) -> None:
+        """Register a single command from a file path (non-preset source).
+
+        Used by reconciliation when the winning layer is an extension,
+        core template, or project override rather than a preset.
+        """
+        if not cmd_path.exists():
+            return
+        cmd_tmpl = {
+            "name": cmd_name,
+            "type": "command",
+            "file": cmd_path.name,
+        }
+        registrar.register_commands_for_all_agents(
+            [cmd_tmpl], "reconciled", cmd_path.parent, self.project_root
+        )
 
     def _get_skills_dir(self) -> Optional[Path]:
         """Return the active skills directory for preset skill overrides.
