@@ -287,6 +287,21 @@ function Test-DirHasFiles {
     }
 }
 
+# Find a usable Python 3 executable (python3, python, or py -3).
+# Returns the command/arguments as an array, or $null if none found.
+function Get-Python3Command {
+    if (Get-Command python3 -ErrorAction SilentlyContinue) { return @('python3') }
+    if (Get-Command python -ErrorAction SilentlyContinue) {
+        $ver = & python --version 2>&1
+        if ($ver -match 'Python 3') { return @('python') }
+    }
+    if (Get-Command py -ErrorAction SilentlyContinue) {
+        $ver = & py -3 --version 2>&1
+        if ($ver -match 'Python 3') { return @('py', '-3') }
+    }
+    return $null
+}
+
 # Resolve a template name to a file path using the priority stack:
 #   1. .specify/templates/overrides/
 #   2. .specify/presets/<preset-id>/templates/ (sorted by priority from .registry)
@@ -401,10 +416,11 @@ function Resolve-TemplateContent {
                 $strategy = 'replace'
                 $manifestFilePath = ''
                 $manifest = Join-Path $presetsDir "$presetId/preset.yml"
-                if ((Test-Path $manifest) -and (Get-Command python3 -ErrorAction SilentlyContinue)) {
+                $pyCmd = Get-Python3Command
+                if ((Test-Path $manifest) -and $pyCmd) {
                     try {
-                        # Use python3 to parse YAML manifest for strategy and file path
-                        $stratResult = & python3 -c @"
+                        # Use Python to parse YAML manifest for strategy and file path
+                        $stratResult = & $pyCmd[0] @($pyCmd[1..99]) -c @"
 import sys
 try:
     import yaml

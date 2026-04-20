@@ -646,8 +646,8 @@ class PresetManager:
                                 continue
                             for tmpl in manifest.templates:
                                 if tmpl.get("name") == cmd_name and tmpl.get("type") == "command":
-                                    registrar.register_commands_for_all_agents(
-                                        [tmpl], manifest.id, pack_dir, self.project_root
+                                    self._register_for_non_skill_agents(
+                                        registrar, [tmpl], manifest.id, pack_dir
                                     )
                                     registered = True
                                     break
@@ -681,9 +681,10 @@ class PresetManager:
                             composed_dir.mkdir(parents=True, exist_ok=True)
                             composed_file = composed_dir / f"{cmd_name}.md"
                             composed_file.write_text(composed, encoding="utf-8")
-                            registrar.register_commands_for_all_agents(
+                            self._register_for_non_skill_agents(
+                                registrar,
                                 [{**tmpl, "file": f".composed/{cmd_name}.md"}],
-                                manifest.id, pack_dir, self.project_root,
+                                manifest.id, pack_dir,
                             )
                             registered = True
                             break
@@ -719,9 +720,35 @@ class PresetManager:
             "type": "command",
             "file": cmd_path.name,
         }
-        registrar.register_commands_for_all_agents(
-            [cmd_tmpl], "reconciled", cmd_path.parent, self.project_root
+        self._register_for_non_skill_agents(
+            registrar, [cmd_tmpl], "reconciled", cmd_path.parent
         )
+
+    def _register_for_non_skill_agents(
+        self,
+        registrar: Any,
+        commands: List[Dict[str, Any]],
+        source_id: str,
+        source_dir: Path,
+    ) -> None:
+        """Register commands for all non-skill agents.
+
+        Used during reconciliation to avoid overwriting properly formatted
+        SKILL.md files that were written by _register_skills().
+        """
+        registrar._ensure_configs()
+        for agent_name, agent_config in registrar.AGENT_CONFIGS.items():
+            if agent_config.get("extension") == "/SKILL.md":
+                continue
+            agent_dir = self.project_root / agent_config["dir"]
+            if agent_dir.exists():
+                try:
+                    registrar.register_commands(
+                        agent_name, commands, source_id,
+                        source_dir, self.project_root,
+                    )
+                except (ValueError, Exception):
+                    continue
 
     def _get_skills_dir(self) -> Optional[Path]:
         """Return the active skills directory for preset skill overrides.
@@ -1185,6 +1212,14 @@ class PresetManager:
                 shutil.rmtree(dest_dir)
             self.registry.remove(manifest.id)
             raise
+
+        # Reconcile all affected commands from the full priority stack so that
+        # install order doesn't determine the winning command file.
+        cmd_names = [
+            t["name"] for t in manifest.templates if t.get("type") == "command"
+        ]
+        if cmd_names:
+            self._reconcile_composed_commands(cmd_names)
 
         return manifest
 

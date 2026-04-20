@@ -542,7 +542,13 @@ except Exception:
                 case "$strat" in
                     prepend) content="$(printf '%s\n\n%s' "$layer_content" "$content")" ;;
                     append)  content="$(printf '%s\n\n%s' "$content" "$layer_content")" ;;
-                    wrap)    content="${layer_content//\{CORE_TEMPLATE\}/$content}" ;;
+                    wrap)
+                        # Split on placeholder and rejoin with content to avoid
+                        # bash & expansion in parameter substitution replacement.
+                        local before="${layer_content%%\{CORE_TEMPLATE\}*}"
+                        local after="${layer_content#*\{CORE_TEMPLATE\}}"
+                        content="${before}${content}${after}"
+                        ;;
                 esac
             fi
         else
@@ -550,7 +556,11 @@ except Exception:
                 replace) content="$layer_content" ;;
                 prepend) content="$(printf '%s\n\n%s' "$layer_content" "$content")" ;;
                 append)  content="$(printf '%s\n\n%s' "$content" "$layer_content")" ;;
-                wrap)    content="${layer_content//\{CORE_TEMPLATE\}/$content}" ;;
+                wrap)
+                    local before="${layer_content%%\{CORE_TEMPLATE\}*}"
+                    local after="${layer_content#*\{CORE_TEMPLATE\}}"
+                    content="${before}${content}${after}"
+                    ;;
             esac
         fi
     done
