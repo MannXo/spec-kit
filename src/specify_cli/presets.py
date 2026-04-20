@@ -1992,6 +1992,8 @@ class PresetResolver:
                                     strategy = tmpl.get("strategy", "replace")
                                     break
                         except PresetValidationError:
+                            # Invalid manifest — fall back to default "replace"
+                            # strategy so layer resolution still works.
                             pass
                     version = metadata.get("version", "?") if metadata else "?"
                     layers.append({
