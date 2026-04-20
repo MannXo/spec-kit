@@ -498,6 +498,12 @@ except Exception:
 
     if ($layerPaths.Count -eq 0) { return $null }
 
+    # If the top (highest-priority) layer is replace, it wins entirely —
+    # lower layers are irrelevant regardless of their strategies.
+    if ($layerStrategies[0] -eq 'replace') {
+        return (Get-Content $layerPaths[0] -Raw)
+    }
+
     # Check if any layer uses a non-replace strategy
     $hasComposition = $false
     foreach ($s in $layerStrategies) {

@@ -3541,7 +3541,7 @@ class TestCollectAllLayers:
     def test_single_core_layer(self, project_dir):
         """Test collecting layers with only core template."""
         resolver = PresetResolver(project_dir)
-        layers = resolver._collect_all_layers("spec-template")
+        layers = resolver.collect_all_layers("spec-template")
         assert len(layers) == 1
         assert layers[0]["source"] == "core"
         assert layers[0]["strategy"] == "replace"
@@ -3554,7 +3554,7 @@ class TestCollectAllLayers:
         manager.install_from_directory(pack_dir, "0.1.5")
 
         resolver = PresetResolver(project_dir)
-        layers = resolver._collect_all_layers("spec-template")
+        layers = resolver.collect_all_layers("spec-template")
         assert len(layers) == 2
         # Highest priority first
         assert "test-pack" in layers[0]["source"]
@@ -3575,7 +3575,7 @@ class TestCollectAllLayers:
             manager.install_from_directory(p, "0.1.5", priority=prio)
 
         resolver = PresetResolver(project_dir)
-        layers = resolver._collect_all_layers("spec-template")
+        layers = resolver.collect_all_layers("spec-template")
         assert len(layers) == 3  # pack-hi, pack-lo, core
         assert "pack-hi" in layers[0]["source"]
         assert "pack-lo" in layers[1]["source"]
@@ -3604,7 +3604,7 @@ class TestCollectAllLayers:
         manager.install_from_directory(pack_dir, "0.1.5")
 
         resolver = PresetResolver(project_dir)
-        layers = resolver._collect_all_layers("spec-template")
+        layers = resolver.collect_all_layers("spec-template")
         # Preset layer should have strategy=append
         assert layers[0]["strategy"] == "append"
         # Core layer should be replace
@@ -3675,7 +3675,7 @@ class TestRemoveReconciliation:
         # The low-priority preset's command should still be present
         # in the resolution stack
         resolver = PresetResolver(project_dir)
-        layers = resolver._collect_all_layers("speckit.specify", "command")
+        layers = resolver.collect_all_layers("speckit.specify", "command")
         assert len(layers) >= 1
         assert "lo-preset" in layers[0]["source"]
 

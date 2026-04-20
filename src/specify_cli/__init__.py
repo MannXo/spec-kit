@@ -2596,7 +2596,7 @@ def preset_resolve(
         raise typer.Exit(1)
 
     resolver = PresetResolver(project_root)
-    layers = resolver._collect_all_layers(template_name)
+    layers = resolver.collect_all_layers(template_name)
     result = resolver.resolve_with_source(template_name)
 
     if layers:

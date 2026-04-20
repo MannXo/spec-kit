@@ -624,7 +624,7 @@ class PresetManager:
         registrar = CommandRegistrar()
 
         for cmd_name in command_names:
-            layers = resolver._collect_all_layers(cmd_name, "command")
+            layers = resolver.collect_all_layers(cmd_name, "command")
             if not layers:
                 continue
 
@@ -770,7 +770,7 @@ class PresetManager:
 
         resolver = PresetResolver(self.project_root)
         for cmd_name in command_names:
-            layers = resolver._collect_all_layers(cmd_name, "command")
+            layers = resolver.collect_all_layers(cmd_name, "command")
             if not layers:
                 continue
 
@@ -1258,6 +1258,9 @@ class PresetManager:
         ]
         if cmd_names:
             self._reconcile_composed_commands(cmd_names)
+            # Also reconcile skills so SKILL.md files reflect the actual
+            # winning command layer, not just the last-installed preset.
+            self._reconcile_skills(cmd_names)
 
         return manifest
 
@@ -2162,7 +2165,7 @@ class PresetResolver:
 
         return {"path": resolved_str, "source": "core"}
 
-    def _collect_all_layers(
+    def collect_all_layers(
         self,
         template_name: str,
         template_type: str = "template",
@@ -2318,7 +2321,7 @@ class PresetResolver:
         Returns:
             Composed content string, or None if not found
         """
-        layers = self._collect_all_layers(template_name, template_type)
+        layers = self.collect_all_layers(template_name, template_type)
         if not layers:
             return None
 
