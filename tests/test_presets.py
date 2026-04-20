@@ -3621,6 +3621,10 @@ class TestRemoveReconciliation:
         should be re-registered in agent directories."""
         manager = PresetManager(project_dir)
 
+        # Create a gemini commands dir so reconciliation writes there
+        gemini_dir = project_dir / ".gemini" / "commands"
+        gemini_dir.mkdir(parents=True)
+
         # Install a low-priority preset with a command
         lo_data = {**valid_pack_data}
         lo_data["preset"] = {
@@ -3669,15 +3673,24 @@ class TestRemoveReconciliation:
         )
         manager.install_from_directory(hi_dir, "0.1.5", priority=1)
 
+        # Verify the hi-preset's content is active in agent dir
+        cmd_files = list(gemini_dir.glob("*specify*"))
+        assert cmd_files, "Command file should exist in gemini dir"
+        assert "Hi content" in cmd_files[0].read_text()
+
         # Remove the high-priority preset
         manager.remove("hi-preset")
 
-        # The low-priority preset's command should still be present
-        # in the resolution stack
+        # The low-priority preset's command should now be in the resolution stack
         resolver = PresetResolver(project_dir)
         layers = resolver.collect_all_layers("speckit.specify", "command")
         assert len(layers) >= 1
         assert "lo-preset" in layers[0]["source"]
+
+        # Verify on-disk agent command file switched to lo-preset content
+        cmd_files = list(gemini_dir.glob("*specify*"))
+        assert cmd_files, "Command file should still exist after removal"
+        assert "Lo content" in cmd_files[0].read_text()
 
 
 def _create_pack(temp_dir, valid_pack_data, pack_id, content,

@@ -572,7 +572,13 @@ class PresetManager:
                         "file": f".composed/{cmd['name']}.md",
                     })
                 else:
-                    commands_to_register.append(cmd)
+                    raise PresetValidationError(
+                        f"Command '{cmd['name']}' uses '{strategy}' strategy "
+                        f"but no base command layer exists to compose onto. "
+                        f"Ensure a lower-priority preset, extension, or core "
+                        f"command provides this command before using "
+                        f"composition strategies."
+                    )
             else:
                 commands_to_register.append(cmd)
 

@@ -557,11 +557,13 @@ except Exception:
                             *'{CORE_TEMPLATE}'*) ;;
                             *) echo "Error: wrap strategy missing {CORE_TEMPLATE} placeholder" >&2; return 1 ;;
                         esac
-                        # Split on first placeholder and rejoin with content to avoid
-                        # bash & expansion in parameter substitution replacement.
-                        local before="${layer_content%%\{CORE_TEMPLATE\}*}"
-                        local after="${layer_content#*\{CORE_TEMPLATE\}}"
-                        content="${before}${content}${after}"
+                        # Replace all occurrences to match Python/PowerShell behavior
+                        while [[ "$layer_content" == *'{CORE_TEMPLATE}'* ]]; do
+                            local before="${layer_content%%\{CORE_TEMPLATE\}*}"
+                            local after="${layer_content#*\{CORE_TEMPLATE\}}"
+                            layer_content="${before}${content}${after}"
+                        done
+                        content="$layer_content"
                         ;;
                 esac
             fi
@@ -575,9 +577,12 @@ except Exception:
                         *'{CORE_TEMPLATE}'*) ;;
                         *) echo "Error: wrap strategy missing {CORE_TEMPLATE} placeholder" >&2; return 1 ;;
                     esac
-                    local before="${layer_content%%\{CORE_TEMPLATE\}*}"
-                    local after="${layer_content#*\{CORE_TEMPLATE\}}"
-                    content="${before}${content}${after}"
+                    while [[ "$layer_content" == *'{CORE_TEMPLATE}'* ]]; do
+                        local before="${layer_content%%\{CORE_TEMPLATE\}*}"
+                        local after="${layer_content#*\{CORE_TEMPLATE\}}"
+                        layer_content="${before}${content}${after}"
+                    done
+                    content="$layer_content"
                     ;;
             esac
         fi
