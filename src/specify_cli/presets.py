@@ -600,6 +600,88 @@ class PresetManager:
         registrar = CommandRegistrar()
         registrar.unregister_commands(registered_commands, self.project_root)
 
+    def _reconcile_composed_commands(self, command_names: List[str]) -> None:
+        """Re-resolve and re-register composed commands from the full stack.
+
+        After install or remove, recompute the effective content for each
+        command name that participates in composition, and write the winning
+        content to the agent directories. This ensures command files always
+        reflect the current priority stack rather than depending on
+        install/remove order.
+
+        Args:
+            command_names: List of command names to reconcile
+        """
+        if not command_names:
+            return
+
+        try:
+            from .agents import CommandRegistrar
+        except ImportError:
+            return
+
+        resolver = PresetResolver(self.project_root)
+        registrar = CommandRegistrar()
+
+        for cmd_name in command_names:
+            layers = resolver._collect_all_layers(cmd_name, "command")
+            if not layers:
+                continue
+
+            has_composition = any(l["strategy"] != "replace" for l in layers)
+            if not has_composition:
+                # Pure replace — the top layer wins. Find which preset owns it
+                # and re-register from that preset's file.
+                top_layer = layers[0]
+                top_path = top_layer["path"]
+                # Find the preset that owns this layer
+                for pack_id, _meta in PresetRegistry(self.presets_dir).list_by_priority():
+                    pack_dir = self.presets_dir / pack_id
+                    if str(top_path).startswith(str(pack_dir)):
+                        manifest_path = pack_dir / "preset.yml"
+                        if manifest_path.exists():
+                            try:
+                                manifest = PresetManifest(manifest_path)
+                            except PresetValidationError:
+                                continue
+                            for tmpl in manifest.templates:
+                                if tmpl.get("name") == cmd_name and tmpl.get("type") == "command":
+                                    registrar.register_commands_for_all_agents(
+                                        [tmpl], manifest.id, pack_dir, self.project_root
+                                    )
+                                    break
+                        break
+            else:
+                # Composed command — resolve from full stack
+                composed = resolver.resolve_content(cmd_name, "command")
+                if not composed:
+                    continue
+
+                # Write to the highest-priority preset's .composed dir
+                for pack_id, _meta in PresetRegistry(self.presets_dir).list_by_priority():
+                    pack_dir = self.presets_dir / pack_id
+                    manifest_path = pack_dir / "preset.yml"
+                    if not manifest_path.exists():
+                        continue
+                    try:
+                        manifest = PresetManifest(manifest_path)
+                    except PresetValidationError:
+                        continue
+                    for tmpl in manifest.templates:
+                        if tmpl.get("name") == cmd_name and tmpl.get("type") == "command":
+                            composed_dir = pack_dir / ".composed"
+                            composed_dir.mkdir(parents=True, exist_ok=True)
+                            composed_file = composed_dir / f"{cmd_name}.md"
+                            composed_file.write_text(composed, encoding="utf-8")
+                            registrar.register_commands_for_all_agents(
+                                [{**tmpl, "file": f".composed/{cmd_name}.md"}],
+                                manifest.id, pack_dir, self.project_root,
+                            )
+                            break
+                    else:
+                        continue
+                    break
+
     def _get_skills_dir(self) -> Optional[Path]:
         """Return the active skills directory for preset skill overrides.
 
@@ -1032,20 +1114,24 @@ class PresetManager:
         })
 
         try:
-            # Register command overrides with AI agents
+            # Register command overrides with AI agents and persist the result
+            # immediately so cleanup can recover even if installation stops
+            # before later phases complete.
             registered_commands = self._register_commands(manifest, dest_dir)
+            self.registry.update(manifest.id, {
+                "registered_commands": registered_commands,
+            })
 
             # Update corresponding skills when --ai-skills was previously used
+            # and persist that result as well.
             registered_skills = self._register_skills(manifest, dest_dir)
+            self.registry.update(manifest.id, {
+                "registered_skills": registered_skills,
+            })
         except Exception:
             # Roll back registry entry on failure
             self.registry.remove(manifest.id)
             raise
-
-        self.registry.update(manifest.id, {
-            "registered_commands": registered_commands,
-            "registered_skills": registered_skills,
-        })
 
         return manifest
 
@@ -1136,6 +1222,10 @@ class PresetManager:
                 }
 
         # Unregister non-skill command files from AI agents.
+        # Collect all command names for post-removal reconciliation.
+        removed_cmd_names = set()
+        for cmd_names in registered_commands.values():
+            removed_cmd_names.update(cmd_names)
         if registered_commands:
             self._unregister_commands(registered_commands)
 
@@ -1143,6 +1233,12 @@ class PresetManager:
             shutil.rmtree(pack_dir)
 
         self.registry.remove(pack_id)
+
+        # Reconcile: if other presets still provide these commands,
+        # re-resolve from the remaining stack so the next layer takes effect.
+        if removed_cmd_names:
+            self._reconcile_composed_commands(list(removed_cmd_names))
+
         return True
 
     def list_installed(self) -> List[Dict[str, Any]]:

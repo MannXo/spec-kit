@@ -2596,22 +2596,28 @@ def preset_resolve(
         raise typer.Exit(1)
 
     resolver = PresetResolver(project_root)
+    layers = resolver._collect_all_layers(template_name)
     result = resolver.resolve_with_source(template_name)
 
-    if result:
-        console.print(f"  [bold]{template_name}[/bold]: {result['path']}")
-        console.print(f"    [dim](from: {result['source']})[/dim]")
+    if layers:
+        # Use the highest-priority layer for display because the final output
+        # may be composed and may not map to resolve_with_source()'s single path.
+        display_layer = layers[0]
+        console.print(f"  [bold]{template_name}[/bold]: {display_layer['path']}")
+        console.print(f"    [dim](top layer from: {display_layer['source']})[/dim]")
 
-        # Show composition chain if any layers use non-replace strategies
-        layers = resolver._collect_all_layers(template_name)
-        has_composition = any(layer["strategy"] != "replace" for layer in layers)
+        has_composition = len(layers) > 1 or any(layer["strategy"] != "replace" for layer in layers)
         if has_composition:
+            console.print("    [dim]Final output is composed from multiple preset layers; the path above is the highest-priority contributing layer.[/dim]")
             console.print("\n  [bold]Composition chain:[/bold]")
             for i, layer in enumerate(reversed(layers)):
                 strategy_label = layer["strategy"]
                 if strategy_label == "replace":
                     strategy_label = "base"
                 console.print(f"    {i + 1}. [{strategy_label}] {layer['source']} → {layer['path']}")
+    elif result:
+        console.print(f"  [bold]{template_name}[/bold]: {result['path']}")
+        console.print(f"    [dim](from: {result['source']})[/dim]")
     else:
         console.print(f"  [yellow]{template_name}[/yellow]: not found")
         console.print("    [dim]No template with this name exists in the resolution stack[/dim]")
