@@ -515,6 +515,13 @@ except Exception:
         [ "$s" != "replace" ] && has_composition=true && break
     done
 
+    # If the top (highest-priority) layer is replace, it wins entirely —
+    # lower layers are irrelevant regardless of their strategies.
+    if [ "${layer_strategies[0]}" = "replace" ]; then
+        cat "${layer_paths[0]}"
+        return 0
+    fi
+
     if [ "$has_composition" = false ]; then
         cat "${layer_paths[0]}"
         return 0

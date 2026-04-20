@@ -628,7 +628,12 @@ class PresetManager:
             if not layers:
                 continue
 
-            has_composition = any(layer["strategy"] != "replace" for layer in layers)
+            # If the top layer is replace, it wins entirely — lower layers
+            # are irrelevant regardless of their strategies.
+            top_is_replace = layers[0]["strategy"] == "replace"
+            has_composition = not top_is_replace and any(
+                layer["strategy"] != "replace" for layer in layers
+            )
             if not has_composition:
                 # Pure replace — the top layer wins.
                 top_layer = layers[0]
@@ -2316,6 +2321,11 @@ class PresetResolver:
         layers = self._collect_all_layers(template_name, template_type)
         if not layers:
             return None
+
+        # If the top (highest-priority) layer is replace, it wins entirely —
+        # lower layers are irrelevant regardless of their strategies.
+        if layers[0]["strategy"] == "replace":
+            return layers[0]["path"].read_text(encoding="utf-8")
 
         # Check if any layer uses a non-replace strategy
         has_composition = any(layer["strategy"] != "replace" for layer in layers)

@@ -3487,6 +3487,53 @@ class TestResolveContent:
         # Should have blank line separator
         assert "\n\n" in content
 
+    def test_resolve_content_replace_over_wrap(self, project_dir, temp_dir, valid_pack_data):
+        """Top-priority replace layer should win even if a lower layer uses wrap."""
+        # Install a low-priority wrap preset (with no placeholder — would fail if evaluated)
+        wrap_data = {**valid_pack_data}
+        wrap_data["preset"] = {**valid_pack_data["preset"], "id": "wrap-lo", "name": "WrapLo"}
+        wrap_data["provides"] = {
+            "templates": [{
+                "type": "template",
+                "name": "spec-template",
+                "file": "templates/spec-template.md",
+                "strategy": "wrap",
+            }]
+        }
+        wrap_dir = temp_dir / "wrap-lo"
+        wrap_dir.mkdir()
+        with open(wrap_dir / "preset.yml", "w") as f:
+            yaml.dump(wrap_data, f)
+        (wrap_dir / "templates").mkdir()
+        # Intentionally missing {CORE_TEMPLATE} — would error if composition ran
+        (wrap_dir / "templates" / "spec-template.md").write_text("wrapper without placeholder")
+
+        manager = PresetManager(project_dir)
+        manager.install_from_directory(wrap_dir, "0.1.5", priority=10)
+
+        # Install a high-priority replace preset
+        rep_data = {**valid_pack_data}
+        rep_data["preset"] = {**valid_pack_data["preset"], "id": "rep-hi", "name": "RepHi"}
+        rep_data["provides"] = {
+            "templates": [{
+                "type": "template",
+                "name": "spec-template",
+                "file": "templates/spec-template.md",
+            }]
+        }
+        rep_dir = temp_dir / "rep-hi"
+        rep_dir.mkdir()
+        with open(rep_dir / "preset.yml", "w") as f:
+            yaml.dump(rep_data, f)
+        (rep_dir / "templates").mkdir()
+        (rep_dir / "templates" / "spec-template.md").write_text("# Replaced content\n")
+
+        manager.install_from_directory(rep_dir, "0.1.5", priority=1)
+
+        resolver = PresetResolver(project_dir)
+        content = resolver.resolve_content("spec-template")
+        assert content == "# Replaced content\n"
+
 
 class TestCollectAllLayers:
     """Test PresetResolver._collect_all_layers() method."""

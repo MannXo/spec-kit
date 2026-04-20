@@ -413,12 +413,12 @@ function Resolve-TemplateContent {
         }
 
         if ($sortedPresets.Count -gt 0) {
+            $pyCmd = Get-Python3Command
             foreach ($presetId in $sortedPresets) {
                 # Read strategy and file path from preset manifest
                 $strategy = 'replace'
                 $manifestFilePath = ''
                 $manifest = Join-Path $presetsDir "$presetId/preset.yml"
-                $pyCmd = Get-Python3Command
                 if ((Test-Path $manifest) -and $pyCmd) {
                     try {
                         # Use Python to parse YAML manifest for strategy and file path
