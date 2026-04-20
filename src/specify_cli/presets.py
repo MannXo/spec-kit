@@ -661,7 +661,8 @@ class PresetManager:
                     # Top layer is a non-preset source (extension, core, or
                     # project override). Register directly from the layer path.
                     self._register_command_from_path(
-                        registrar, cmd_name, top_path
+                        registrar, cmd_name, top_path,
+                        source_id=layers[0]["source"],
                     )
             else:
                 # Composed command — resolve from full stack
@@ -704,7 +705,8 @@ class PresetManager:
                     composed_file = shared_composed / f"{cmd_name}.md"
                     composed_file.write_text(composed, encoding="utf-8")
                     self._register_command_from_path(
-                        registrar, cmd_name, composed_file
+                        registrar, cmd_name, composed_file,
+                        source_id=layers[0]["source"],
                     )
 
     def _register_command_from_path(
@@ -712,11 +714,18 @@ class PresetManager:
         registrar: Any,
         cmd_name: str,
         cmd_path: Path,
+        source_id: str = "reconciled",
     ) -> None:
         """Register a single command from a file path (non-preset source).
 
         Used by reconciliation when the winning layer is an extension,
         core template, or project override rather than a preset.
+
+        Args:
+            registrar: CommandRegistrar instance
+            cmd_name: Command name
+            cmd_path: Path to the command file
+            source_id: Source attribution for rendered output
         """
         if not cmd_path.exists():
             return
@@ -726,7 +735,7 @@ class PresetManager:
             "file": cmd_path.name,
         }
         self._register_for_non_skill_agents(
-            registrar, [cmd_tmpl], "reconciled", cmd_path.parent
+            registrar, [cmd_tmpl], source_id, cmd_path.parent
         )
 
     def _register_for_non_skill_agents(
