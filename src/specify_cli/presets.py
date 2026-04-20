@@ -628,7 +628,7 @@ class PresetManager:
             if not layers:
                 continue
 
-            has_composition = any(l["strategy"] != "replace" for l in layers)
+            has_composition = any(layer["strategy"] != "replace" for layer in layers)
             if not has_composition:
                 # Pure replace — the top layer wins.
                 top_layer = layers[0]
