@@ -54,6 +54,10 @@ provides:
     #   replaces: "plan-template"
 
     # COMPOSITION EXAMPLES:
+    # The `file` field points to the content file (can differ from the
+    # convention path `templates/<name>.md`). The `name` field identifies
+    # which template to compose with in the priority stack.
+    #
     # Append additional sections to an existing template:
     # - type: "template"
     #   name: "spec-template"

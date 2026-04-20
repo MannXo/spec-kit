@@ -414,33 +414,66 @@ except Exception:
 " 2>/dev/null); then
                 if [ -n "$sorted_presets" ]; then
                     while IFS= read -r preset_id; do
-                        local candidate="$presets_dir/$preset_id/templates/${template_name}.md"
-                        if [ -f "$candidate" ]; then
-                            # Read strategy from preset manifest
-                            local strategy="replace"
-                            local manifest="$presets_dir/$preset_id/preset.yml"
-                            if [ -f "$manifest" ] && command -v python3 >/dev/null 2>&1; then
-                                local s
-                                s=$(SPECKIT_MANIFEST="$manifest" SPECKIT_TMPL="$template_name" python3 -c "
+                        # Read strategy and file path from preset manifest
+                        local strategy="replace"
+                        local manifest_file=""
+                        local manifest="$presets_dir/$preset_id/preset.yml"
+                        if [ -f "$manifest" ] && command -v python3 >/dev/null 2>&1; then
+                            local result
+                            result=$(SPECKIT_MANIFEST="$manifest" SPECKIT_TMPL="$template_name" python3 -c "
 import yaml, sys, os
 try:
     with open(os.environ['SPECKIT_MANIFEST']) as f:
         data = yaml.safe_load(f)
     for t in data.get('provides', {}).get('templates', []):
         if t.get('name') == os.environ['SPECKIT_TMPL'] and t.get('type', 'template') == 'template':
-            print(t.get('strategy', 'replace'))
+            print(t.get('strategy', 'replace') + '\t' + t.get('file', ''))
             sys.exit(0)
-    print('replace')
+    print('replace\t')
 except Exception:
-    print('replace')
-" 2>/dev/null) && strategy="$s"
-                            fi
+    print('replace\t')
+" 2>/dev/null) && {
+                                strategy="${result%%	*}"
+                                manifest_file="${result#*	}"
+                            }
+                        fi
+                        # Try manifest file path first, then convention path
+                        local candidate=""
+                        if [ -n "$manifest_file" ]; then
+                            local mf="$presets_dir/$preset_id/$manifest_file"
+                            [ -f "$mf" ] && candidate="$mf"
+                        fi
+                        if [ -z "$candidate" ]; then
+                            local cf="$presets_dir/$preset_id/templates/${template_name}.md"
+                            [ -f "$cf" ] && candidate="$cf"
+                        fi
+                        if [ -n "$candidate" ]; then
                             layer_paths+=("$candidate")
                             layer_strategies+=("$strategy")
                         fi
                     done <<< "$sorted_presets"
                 fi
+            else
+                # python3 failed — fall back to unordered directory scan (replace only)
+                for preset in "$presets_dir"/*/; do
+                    [ -d "$preset" ] || continue
+                    local candidate="$preset/templates/${template_name}.md"
+                    if [ -f "$candidate" ]; then
+                        layer_paths+=("$candidate")
+                        layer_strategies+=("replace")
+                    fi
+                done
             fi
+        else
+            # No python3 or registry — fall back to unordered directory scan (replace only)
+            for preset in "$presets_dir"/*/; do
+                [ -d "$preset" ] || continue
+                local candidate="$preset/templates/${template_name}.md"
+                if [ -f "$candidate" ]; then
+                    layer_paths+=("$candidate")
+                    layer_strategies+=("replace")
+                fi
+            done
         fi
     fi
 
@@ -501,16 +534,16 @@ except Exception:
                 [ "$has_base" = false ] && return 1
                 started=true
                 case "$strat" in
-                    prepend) content="${layer_content}\n\n${content}" ;;
-                    append)  content="${content}\n\n${layer_content}" ;;
+                    prepend) content="$(printf '%s\n\n%s' "$layer_content" "$content")" ;;
+                    append)  content="$(printf '%s\n\n%s' "$content" "$layer_content")" ;;
                     wrap)    content="${layer_content//\{CORE_TEMPLATE\}/$content}" ;;
                 esac
             fi
         else
             case "$strat" in
                 replace) content="$layer_content" ;;
-                prepend) content="${layer_content}\n\n${content}" ;;
-                append)  content="${content}\n\n${layer_content}" ;;
+                prepend) content="$(printf '%s\n\n%s' "$layer_content" "$content")" ;;
+                append)  content="$(printf '%s\n\n%s' "$content" "$layer_content")" ;;
                 wrap)    content="${layer_content//\{CORE_TEMPLATE\}/$content}" ;;
             esac
         fi

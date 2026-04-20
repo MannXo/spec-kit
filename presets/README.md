@@ -65,7 +65,7 @@ Presets **override by default**, they don't merge. If two presets both provide `
 
 ### Composition Strategies
 
-Presets can declare a `strategy` per template to control how content is combined:
+Presets can declare a `strategy` per template to control how content is combined. The `name` field identifies which template to compose with in the priority stack, while `file` points to the actual content file (which can differ from the convention path `templates/<name>.md`):
 
 ```yaml
 provides:

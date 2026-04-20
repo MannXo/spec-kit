@@ -396,32 +396,46 @@ function Resolve-TemplateContent {
         }
 
         foreach ($presetId in $sortedPresets) {
-            $candidate = Join-Path $presetsDir "$presetId/templates/$TemplateName.md"
-            if (Test-Path $candidate) {
-                # Read strategy from preset manifest
-                $strategy = 'replace'
-                $manifest = Join-Path $presetsDir "$presetId/preset.yml"
-                if (Test-Path $manifest) {
-                    try {
-                        # Use python3 to parse YAML manifest for strategy
-                        $stratResult = & python3 -c @"
+            # Read strategy and file path from preset manifest
+            $strategy = 'replace'
+            $manifestFilePath = ''
+            $manifest = Join-Path $presetsDir "$presetId/preset.yml"
+            if (Test-Path $manifest) {
+                try {
+                    # Use python3 to parse YAML manifest for strategy and file path
+                    $stratResult = & python3 -c @"
 import yaml, sys
 try:
     with open(sys.argv[1]) as f:
         data = yaml.safe_load(f)
     for t in data.get('provides', {}).get('templates', []):
         if t.get('name') == sys.argv[2] and t.get('type', 'template') == 'template':
-            print(t.get('strategy', 'replace'))
+            print(t.get('strategy', 'replace') + '\t' + t.get('file', ''))
             sys.exit(0)
-    print('replace')
+    print('replace\t')
 except Exception:
-    print('replace')
+    print('replace\t')
 "@ $manifest $TemplateName 2>$null
-                        if ($stratResult) { $strategy = $stratResult.Trim() }
-                    } catch {
-                        $strategy = 'replace'
+                    if ($stratResult) {
+                        $parts = $stratResult.Trim() -split "`t", 2
+                        $strategy = $parts[0]
+                        if ($parts.Count -gt 1 -and $parts[1]) { $manifestFilePath = $parts[1] }
                     }
+                } catch {
+                    $strategy = 'replace'
                 }
+            }
+            # Try manifest file path first, then convention path
+            $candidate = $null
+            if ($manifestFilePath) {
+                $mf = Join-Path $presetsDir "$presetId/$manifestFilePath"
+                if (Test-Path $mf) { $candidate = $mf }
+            }
+            if (-not $candidate) {
+                $cf = Join-Path $presetsDir "$presetId/templates/$TemplateName.md"
+                if (Test-Path $cf) { $candidate = $cf }
+            }
+            if ($candidate) {
                 $layerPaths += $candidate
                 $layerStrategies += $strategy
             }
@@ -488,7 +502,7 @@ except Exception:
                 switch ($strat) {
                     'prepend' { $content = "$layerContent`n`n$content" }
                     'append'  { $content = "$content`n`n$layerContent" }
-                    'wrap'    { $content = $layerContent -replace [regex]::Escape('{CORE_TEMPLATE}'), $content }
+                    'wrap'    { $content = $layerContent.Replace('{CORE_TEMPLATE}', $content) }
                 }
             }
         } else {
@@ -496,7 +510,7 @@ except Exception:
                 'replace' { $content = $layerContent }
                 'prepend' { $content = "$layerContent`n`n$content" }
                 'append'  { $content = "$content`n`n$layerContent" }
-                'wrap'    { $content = $layerContent -replace [regex]::Escape('{CORE_TEMPLATE}'), $content }
+                'wrap'    { $content = $layerContent.Replace('{CORE_TEMPLATE}', $content) }
             }
         }
     }

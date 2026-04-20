@@ -779,6 +779,12 @@ class PresetManager:
             if not source_file.exists():
                 continue
 
+            # Use composed content if available (written by _register_commands
+            # for commands with non-replace strategies), otherwise the original.
+            composed_file = preset_dir / ".composed" / f"{cmd_name}.md"
+            if composed_file.exists():
+                source_file = composed_file
+
             # Derive the short command name (e.g. "specify" from "speckit.specify")
             raw_short_name = cmd_name
             if raw_short_name.startswith("speckit."):
@@ -1013,18 +1019,30 @@ class PresetManager:
 
         shutil.copytree(source_dir, dest_dir)
 
-        # Register command overrides with AI agents
-        registered_commands = self._register_commands(manifest, dest_dir)
-
-        # Update corresponding skills when --ai-skills was previously used
-        registered_skills = self._register_skills(manifest, dest_dir)
-
+        # Pre-register the preset so that composition resolution can see it
+        # in the priority stack when resolving composed command content.
         self.registry.add(manifest.id, {
             "version": manifest.version,
             "source": "local",
             "manifest_hash": manifest.get_hash(),
             "enabled": True,
             "priority": priority,
+            "registered_commands": {},
+            "registered_skills": [],
+        })
+
+        try:
+            # Register command overrides with AI agents
+            registered_commands = self._register_commands(manifest, dest_dir)
+
+            # Update corresponding skills when --ai-skills was previously used
+            registered_skills = self._register_skills(manifest, dest_dir)
+        except Exception:
+            # Roll back registry entry on failure
+            self.registry.remove(manifest.id)
+            raise
+
+        self.registry.update(manifest.id, {
             "registered_commands": registered_commands,
             "registered_skills": registered_skills,
         })
@@ -1978,23 +1996,32 @@ class PresetResolver:
             registry = PresetRegistry(self.presets_dir)
             for pack_id, metadata in registry.list_by_priority():
                 pack_dir = self.presets_dir / pack_id
-                candidate = _find_in_subdirs(pack_dir)
+                # Read strategy and manifest file path from preset manifest
+                strategy = "replace"
+                manifest_file_path = None
+                manifest_path = pack_dir / "preset.yml"
+                if manifest_path.exists():
+                    try:
+                        manifest = PresetManifest(manifest_path)
+                        for tmpl in manifest.templates:
+                            if (tmpl.get("name") == template_name
+                                    and tmpl.get("type") == template_type):
+                                strategy = tmpl.get("strategy", "replace")
+                                manifest_file_path = tmpl.get("file")
+                                break
+                    except PresetValidationError:
+                        # Invalid manifest — fall back to default "replace"
+                        # strategy so layer resolution still works.
+                        pass
+                # Use manifest file path if specified, otherwise convention-based lookup
+                candidate = None
+                if manifest_file_path:
+                    manifest_candidate = pack_dir / manifest_file_path
+                    if manifest_candidate.exists():
+                        candidate = manifest_candidate
+                if candidate is None:
+                    candidate = _find_in_subdirs(pack_dir)
                 if candidate:
-                    # Read strategy from preset manifest
-                    strategy = "replace"
-                    manifest_path = pack_dir / "preset.yml"
-                    if manifest_path.exists():
-                        try:
-                            manifest = PresetManifest(manifest_path)
-                            for tmpl in manifest.templates:
-                                if (tmpl.get("name") == template_name
-                                        and tmpl.get("type") == template_type):
-                                    strategy = tmpl.get("strategy", "replace")
-                                    break
-                        except PresetValidationError:
-                            # Invalid manifest — fall back to default "replace"
-                            # strategy so layer resolution still works.
-                            pass
                     version = metadata.get("version", "?") if metadata else "?"
                     layers.append({
                         "path": candidate,
