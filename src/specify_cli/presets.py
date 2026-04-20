@@ -2346,10 +2346,40 @@ class PresetResolver:
         if content is None:
             return None
 
+        # For command composition, strip frontmatter from each layer to avoid
+        # leaking YAML metadata into the composed body. The highest-priority
+        # layer's frontmatter will be reattached at the end.
+        is_command = template_type == "command"
+        top_frontmatter_text = None
+
+        def _strip_frontmatter(text: str) -> tuple:
+            """Return (frontmatter_text_with_fences, body) or (None, text)."""
+            if not text.startswith("---"):
+                return None, text
+            end = text.find("---", 3)
+            if end == -1:
+                return None, text
+            fm_block = text[:end + 3]
+            body = text[end + 3:].strip()
+            return fm_block, body
+
+        if is_command:
+            fm, body = _strip_frontmatter(content)
+            if fm:
+                top_frontmatter_text = fm
+                content = body
+
         # Apply composition layers from bottom to top
         for layer in reversed_layers[start_idx:]:
             layer_content = layer["path"].read_text(encoding="utf-8")
             strategy = layer["strategy"]
+
+            if is_command:
+                fm, layer_body = _strip_frontmatter(layer_content)
+                layer_content = layer_body
+                # Track the highest-priority frontmatter seen
+                if fm:
+                    top_frontmatter_text = fm
 
             if strategy == "replace":
                 content = layer_content
@@ -2370,5 +2400,9 @@ class PresetResolver:
                         f"lower-priority content should be inserted."
                     )
                 content = layer_content.replace(placeholder, content)
+
+        # Reattach the highest-priority frontmatter for commands
+        if is_command and top_frontmatter_text:
+            content = top_frontmatter_text + "\n\n" + content
 
         return content

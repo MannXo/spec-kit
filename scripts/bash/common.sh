@@ -321,7 +321,8 @@ try:
         data = json.load(f)
     presets = data.get('presets', {})
     for pid, meta in sorted(presets.items(), key=lambda x: x[1].get('priority', 10)):
-        print(pid)
+        if meta.get('enabled', True) is not False:
+            print(pid)
 except Exception:
     sys.exit(1)
 " 2>/dev/null); then
@@ -408,7 +409,8 @@ try:
         data = json.load(f)
     presets = data.get('presets', {})
     for pid, meta in sorted(presets.items(), key=lambda x: x[1].get('priority', 10)):
-        print(pid)
+        if meta.get('enabled', True) is not False:
+            print(pid)
 except Exception:
     sys.exit(1)
 " 2>/dev/null); then
