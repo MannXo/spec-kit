@@ -637,7 +637,7 @@ class PresetManager:
                 registered = False
                 for pack_id, _meta in PresetRegistry(self.presets_dir).list_by_priority():
                     pack_dir = self.presets_dir / pack_id
-                    if str(top_path).startswith(str(pack_dir)):
+                    if top_path.is_relative_to(pack_dir):
                         manifest_path = pack_dir / "preset.yml"
                         if manifest_path.exists():
                             try:
@@ -1170,7 +1170,19 @@ class PresetManager:
                 "registered_skills": registered_skills,
             })
         except Exception:
-            # Roll back registry entry on failure
+            # Roll back all side effects: unregister any commands/skills that
+            # were written, remove the copied preset dir, and drop the
+            # registry entry.
+            metadata = self.registry.get(manifest.id)
+            if metadata:
+                rc = metadata.get("registered_commands", {})
+                if rc:
+                    self._unregister_commands(rc)
+                rs = metadata.get("registered_skills", [])
+                if rs:
+                    self._unregister_skills(rs, dest_dir)
+            if dest_dir.exists():
+                shutil.rmtree(dest_dir)
             self.registry.remove(manifest.id)
             raise
 
@@ -2276,8 +2288,16 @@ class PresetResolver:
                 content = content + "\n\n" + layer_content
             elif strategy == "wrap":
                 if template_type == "script":
-                    content = layer_content.replace("$CORE_SCRIPT", content)
+                    placeholder = "$CORE_SCRIPT"
                 else:
-                    content = layer_content.replace("{CORE_TEMPLATE}", content)
+                    placeholder = "{CORE_TEMPLATE}"
+                if placeholder not in layer_content:
+                    raise PresetValidationError(
+                        f"Wrap strategy in '{layer['source']}' is missing "
+                        f"the {placeholder} placeholder. The wrapper must "
+                        f"contain {placeholder} to indicate where the "
+                        f"lower-priority content should be inserted."
+                    )
+                content = layer_content.replace(placeholder, content)
 
         return content

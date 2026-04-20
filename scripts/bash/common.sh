@@ -419,9 +419,15 @@ except Exception:
                         local manifest_file=""
                         local manifest="$presets_dir/$preset_id/preset.yml"
                         if [ -f "$manifest" ] && command -v python3 >/dev/null 2>&1; then
+                            # Requires PyYAML; falls back to replace/convention if unavailable
                             local result
                             result=$(SPECKIT_MANIFEST="$manifest" SPECKIT_TMPL="$template_name" python3 -c "
-import yaml, sys, os
+import sys, os
+try:
+    import yaml
+except ImportError:
+    print('replace\t')
+    sys.exit(0)
 try:
     with open(os.environ['SPECKIT_MANIFEST']) as f:
         data = yaml.safe_load(f)

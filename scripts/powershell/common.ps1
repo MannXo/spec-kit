@@ -401,11 +401,16 @@ function Resolve-TemplateContent {
                 $strategy = 'replace'
                 $manifestFilePath = ''
                 $manifest = Join-Path $presetsDir "$presetId/preset.yml"
-                if (Test-Path $manifest) {
+                if ((Test-Path $manifest) -and (Get-Command python3 -ErrorAction SilentlyContinue)) {
                     try {
                         # Use python3 to parse YAML manifest for strategy and file path
                         $stratResult = & python3 -c @"
-import yaml, sys
+import sys
+try:
+    import yaml
+except ImportError:
+    print('replace\t')
+    sys.exit(0)
 try:
     with open(sys.argv[1]) as f:
         data = yaml.safe_load(f)
