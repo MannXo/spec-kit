@@ -420,7 +420,8 @@ function Resolve-TemplateContent {
                 if ((Test-Path $manifest) -and $pyCmd) {
                     try {
                         # Use Python to parse YAML manifest for strategy and file path
-                        $stratResult = & $pyCmd[0] @($pyCmd[1..99]) -c @"
+                        $pyArgs = if ($pyCmd.Count -gt 1) { $pyCmd[1..($pyCmd.Count-1)] } else { @() }
+                        $stratResult = & $pyCmd[0] @pyArgs -c @"
 import sys
 try:
     import yaml
@@ -524,7 +525,12 @@ except Exception:
                 switch ($strat) {
                     'prepend' { $content = "$layerContent`n`n$content" }
                     'append'  { $content = "$content`n`n$layerContent" }
-                    'wrap'    { $content = $layerContent.Replace('{CORE_TEMPLATE}', $content) }
+                    'wrap'    {
+                        if (-not $layerContent.Contains('{CORE_TEMPLATE}')) {
+                            throw "Wrap strategy missing {CORE_TEMPLATE} placeholder"
+                        }
+                        $content = $layerContent.Replace('{CORE_TEMPLATE}', $content)
+                    }
                 }
             }
         } else {
@@ -532,7 +538,12 @@ except Exception:
                 'replace' { $content = $layerContent }
                 'prepend' { $content = "$layerContent`n`n$content" }
                 'append'  { $content = "$content`n`n$layerContent" }
-                'wrap'    { $content = $layerContent.Replace('{CORE_TEMPLATE}', $content) }
+                'wrap'    {
+                    if (-not $layerContent.Contains('{CORE_TEMPLATE}')) {
+                        throw "Wrap strategy missing {CORE_TEMPLATE} placeholder"
+                    }
+                    $content = $layerContent.Replace('{CORE_TEMPLATE}', $content)
+                }
             }
         }
     }

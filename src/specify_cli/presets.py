@@ -747,8 +747,41 @@ class PresetManager:
                         agent_name, commands, source_id,
                         source_dir, self.project_root,
                     )
-                except (ValueError, Exception):
+                except ValueError:
                     continue
+
+    def _reconcile_skills(self, command_names: List[str]) -> None:
+        """Re-register skills for commands whose winning layer changed.
+
+        After a preset is removed, finds the next preset in the priority
+        stack that provides each command and re-runs skill registration
+        for that preset so SKILL.md files reflect the current winner.
+
+        Args:
+            command_names: List of command names to reconcile skills for
+        """
+        if not command_names:
+            return
+
+        resolver = PresetResolver(self.project_root)
+        for cmd_name in command_names:
+            layers = resolver._collect_all_layers(cmd_name, "command")
+            if not layers:
+                continue
+
+            top_path = layers[0]["path"]
+            # Find the preset that owns the winning layer
+            for pack_id, _meta in PresetRegistry(self.presets_dir).list_by_priority():
+                pack_dir = self.presets_dir / pack_id
+                if top_path.is_relative_to(pack_dir):
+                    manifest_path = pack_dir / "preset.yml"
+                    if manifest_path.exists():
+                        try:
+                            manifest = PresetManifest(manifest_path)
+                        except PresetValidationError:
+                            break
+                        self._register_skills(manifest, pack_dir)
+                    break
 
     def _get_skills_dir(self) -> Optional[Path]:
         """Return the active skills directory for preset skill overrides.
@@ -1326,6 +1359,9 @@ class PresetManager:
         # re-resolve from the remaining stack so the next layer takes effect.
         if removed_cmd_names:
             self._reconcile_composed_commands(list(removed_cmd_names))
+            # Also reconcile skills so SKILL.md files reflect the new winning
+            # command layer rather than being left absent or stale.
+            self._reconcile_skills(list(removed_cmd_names))
 
         return True
 

@@ -543,7 +543,12 @@ except Exception:
                     prepend) content="$(printf '%s\n\n%s' "$layer_content" "$content")" ;;
                     append)  content="$(printf '%s\n\n%s' "$content" "$layer_content")" ;;
                     wrap)
-                        # Split on placeholder and rejoin with content to avoid
+                        # Validate placeholder exists
+                        case "$layer_content" in
+                            *'{CORE_TEMPLATE}'*) ;;
+                            *) echo "Error: wrap strategy missing {CORE_TEMPLATE} placeholder" >&2; return 1 ;;
+                        esac
+                        # Split on first placeholder and rejoin with content to avoid
                         # bash & expansion in parameter substitution replacement.
                         local before="${layer_content%%\{CORE_TEMPLATE\}*}"
                         local after="${layer_content#*\{CORE_TEMPLATE\}}"
@@ -557,6 +562,10 @@ except Exception:
                 prepend) content="$(printf '%s\n\n%s' "$layer_content" "$content")" ;;
                 append)  content="$(printf '%s\n\n%s' "$content" "$layer_content")" ;;
                 wrap)
+                    case "$layer_content" in
+                        *'{CORE_TEMPLATE}'*) ;;
+                        *) echo "Error: wrap strategy missing {CORE_TEMPLATE} placeholder" >&2; return 1 ;;
+                    esac
                     local before="${layer_content%%\{CORE_TEMPLATE\}*}"
                     local after="${layer_content#*\{CORE_TEMPLATE\}}"
                     content="${before}${content}${after}"
