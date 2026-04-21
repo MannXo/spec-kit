@@ -3429,10 +3429,10 @@ class TestResolveContent:
 
     def test_resolve_content_command_type(self, project_dir, temp_dir, valid_pack_data):
         """Test resolve_content with command template type."""
-        # Create core command
+        # Create core command using stem naming (matches real layout: plan.md, not speckit.plan.md)
         commands_dir = project_dir / ".specify" / "templates" / "commands"
         commands_dir.mkdir(parents=True, exist_ok=True)
-        (commands_dir / "speckit.plan.md").write_text("# Core Plan Command\n")
+        (commands_dir / "plan.md").write_text("# Core Plan Command\n")
 
         pack_data = {**valid_pack_data}
         pack_data["preset"] = {**valid_pack_data["preset"], "id": "cmd-append", "name": "CmdAppend"}

@@ -156,6 +156,12 @@ class PresetManifest:
 
             # Validate strategy field (optional, defaults to "replace")
             strategy = tmpl.get("strategy", "replace")
+            if not isinstance(strategy, str):
+                raise PresetValidationError(
+                    f"Invalid strategy value: must be a string, "
+                    f"got {type(strategy).__name__}"
+                )
+            strategy = strategy.lower()
             if strategy not in VALID_PRESET_STRATEGIES:
                 raise PresetValidationError(
                     f"Invalid strategy '{strategy}': "
@@ -2037,6 +2043,19 @@ class PresetResolver:
         all_extensions.sort(key=lambda x: (x[0], x[1]))
         return all_extensions
 
+    @staticmethod
+    def _core_stem(template_name: str) -> Optional[str]:
+        """Extract the stem for core command lookup.
+
+        Commands use dot notation (e.g. ``speckit.specify``), but core
+        command files are named by stem (e.g. ``specify.md``).  Returns
+        the stem if *template_name* follows the ``speckit.<stem>`` pattern,
+        or ``None`` otherwise.
+        """
+        if template_name.startswith("speckit."):
+            return template_name[len("speckit."):]
+        return None
+
     def resolve(
         self,
         template_name: str,
@@ -2111,6 +2130,12 @@ class PresetResolver:
             core = self.templates_dir / "commands" / f"{template_name}.md"
             if core.exists():
                 return core
+            # Fallback: speckit.<stem> → <stem>.md
+            stem = self._core_stem(template_name)
+            if stem:
+                core = self.templates_dir / "commands" / f"{stem}.md"
+                if core.exists():
+                    return core
         elif template_type == "script":
             core = self.templates_dir / "scripts" / f"{template_name}{ext}"
             if core.exists():
@@ -2300,6 +2325,13 @@ class PresetResolver:
             c = self.templates_dir / "commands" / f"{template_name}.md"
             if c.exists():
                 core = c
+            else:
+                # Fallback: speckit.<stem> → <stem>.md
+                stem = self._core_stem(template_name)
+                if stem:
+                    c = self.templates_dir / "commands" / f"{stem}.md"
+                    if c.exists():
+                        core = c
         elif template_type == "script":
             c = self.templates_dir / "scripts" / f"{template_name}{ext}"
             if c.exists():
